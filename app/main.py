@@ -2,7 +2,7 @@ import sys
 
 
 def main():
-    sys.stdout.write("$ ")
+    sys.stdout.write("$ invalid_pineapple_command")
     pass
 
 
