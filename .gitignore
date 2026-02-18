@@ -174,5 +174,5 @@ cython_debug/
 .pypirc
 
 .codecrafters
-codecrafters.yml
+# codecrafters.yml
 .README.md
