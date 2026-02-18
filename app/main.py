@@ -13,7 +13,15 @@ def handle_echo(args):
     return print(" ".join(args))
 
 
-command_lib = {"exit": handle_exit, "echo": handle_echo}
+def handle_type(args):
+    for arg in args:
+        if arg in command_lib:
+            print(f"{arg} is a shell builtin")
+        else:
+            print(f"{arg} not found")
+
+
+command_lib = {"exit": handle_exit, "echo": handle_echo, "type": handle_type}
 
 
 def main():
