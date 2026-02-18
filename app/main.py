@@ -2,8 +2,7 @@ import sys
 
 
 def main():
-    while True:
-        sys.stdout.write("$ ")
+    sys.stdout.write("$ ")
     pass
 
 
