@@ -38,7 +38,7 @@ def handle_echo(args):
 def handle_type(args):
     for arg in args:
         # Argument is Actual Command
-        if arg in command_lib:
+        if arg in builtin_lib:
             print(f"{arg} is a shell builtin")
             continue
 
@@ -61,16 +61,16 @@ def handle_pwd(_):
     return print(os.getcwd())
 
 
-command_lib = {
+builtin_lib = {
     "exit": handle_exit,
     "echo": handle_echo,
     "type": handle_type,
+    "pwd": handle_pwd,
 }
 
 
 def main():
-    exit()
-    print("bruh")
+
     while True:
         sys.stdout.write("$ ")
         user_input = input()
@@ -83,11 +83,11 @@ def main():
         cmd, *args = cmd_line
 
         # Search Command Library for Correct Function To Use
-        command_func = command_lib.get(cmd, None)
+        command_func = builtin_lib.get(cmd, None)
 
         # Non Built In Case
         if not command_func:
-            command_func = handle_custom_exec(cmd_line)
+            command_func = handle_custom_exec(cmd_line, user_input)
 
         command_func(args)
     pass
