@@ -49,6 +49,7 @@ def handle_type(args):
             print(f"{arg} not found")
 
 
+# Custom Or Not Found Exec Case
 def handle_custom_exec(cmd_line, user_input):
     file_path = find_which_path(cmd_line[0])
     if file_path:
@@ -56,10 +57,20 @@ def handle_custom_exec(cmd_line, user_input):
     return not_found(user_input)
 
 
-command_lib = {"exit": handle_exit, "echo": handle_echo, "type": handle_type}
+def handle_pwd(_):
+    return print(os.getcwd())
+
+
+command_lib = {
+    "exit": handle_exit,
+    "echo": handle_echo,
+    "type": handle_type,
+}
 
 
 def main():
+    exit()
+    print("bruh")
     while True:
         sys.stdout.write("$ ")
         user_input = input()
@@ -76,7 +87,7 @@ def main():
 
         # Non Built In Case
         if not command_func:
-            command_func = handle_custom_exec(cmd_line, user_input)
+            command_func = handle_custom_exec(cmd_line)
 
         command_func(args)
     pass
