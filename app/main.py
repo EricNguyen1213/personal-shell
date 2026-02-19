@@ -1,22 +1,21 @@
 import sys
-import os
-from pathlib import Path
+import re
 from app.cmd_lib import CommandLibrary
 
 
 def main():
-
     cmd_lib = CommandLibrary()
     while True:
         sys.stdout.write("$ ")
         user_input = input()
-        cmd_line = user_input.split()
+        cmd_line = re.split(r"\s+(?=(?:[^']*'[^']*')*[^']*$)", user_input)
 
         # User Input Does Not Exist Case
         if not cmd_line:
             continue
 
         cmd, *args = cmd_line
+        args = [arg.replace("'", "") for arg in args]
 
         # Search Command Library for Correct Function To Use
         command_func = cmd_lib.find_command(cmd, user_input)
