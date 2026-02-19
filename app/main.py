@@ -8,14 +8,17 @@ def main():
     while True:
         sys.stdout.write("$ ")
         user_input = input()
-        cmd_line = re.split(r"\s+(?=(?:[^']*'[^']*')*[^']*$)", user_input)
+
+        # Santize User Input (Splitting by Whitespace Outside Single Quotes)
+        cmd_line = re.split(r"""\s+(?=(?:[^'"]|'[^']*'|"[^"]*")*$)""", user_input)
 
         # User Input Does Not Exist Case
         if not cmd_line:
             continue
 
         cmd, *args = cmd_line
-        args = [arg.replace("'", "") for arg in args]
+        # Removes Top-Most Quotes:  "'hello'"'"world"'  -> 'hello'"world"
+        args = [re.sub(r"(\\'|\"|')(.*?)\1", r"\2", arg) for arg in args]
 
         # Search Command Library for Correct Function To Use
         command_func = cmd_lib.find_command(cmd, user_input)
