@@ -1,24 +1,27 @@
 import sys
-import re
+import app.utils as utils
 from app.cmd_lib import CommandLibrary
+
+
+def sanitize(m):
+    # Escaped Quote Match Foundex
+    if m.group(1):
+
+        return f"{m.group(2)}{m.group(3)}{m.group(2)}"
+    return m.group(6)
 
 
 def main():
     cmd_lib = CommandLibrary()
     while True:
         sys.stdout.write("$ ")
-        user_input = input()
-
-        # Santize User Input (Splitting by Whitespace Outside Single Quotes)
-        cmd_line = re.split(r"""\s+(?=(?:[^'"]|'[^']*'|"[^"]*")*$)""", user_input)
+        user_input = input().strip()
 
         # User Input Does Not Exist Case
-        if not cmd_line:
+        if not user_input:
             continue
 
-        cmd, *args = cmd_line
-        # Removes Top-Most Quotes:  "'hello'"'"world"'  -> 'hello'"world"
-        args = [re.sub(r"(\\'|\"|')(.*?)\1", r"\2", arg) for arg in args]
+        cmd, args = utils.sanitize(user_input)
 
         # Search Command Library for Correct Function To Use
         command_func = cmd_lib.find_command(cmd, user_input)
