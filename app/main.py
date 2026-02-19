@@ -1,76 +1,12 @@
 import sys
 import os
 from pathlib import Path
-import subprocess
-
-
-def find_which_path(fn):
-    # Construct And Check Validity of Path to Possible File Input
-    paths = os.getenv("PATH", "").split(os.pathsep)
-    valid_file_path = next(
-        (
-            file_path
-            for file_path in (Path(f"{path}/{fn}") for path in paths)
-            if file_path.exists()
-            and file_path.is_file()
-            and os.access(file_path, os.X_OK)
-        ),
-        None,
-    )
-    return valid_file_path
-
-
-def not_found(user_input):
-    return lambda _: print(f"{user_input}: command not found")
-
-
-# exit command case
-def handle_exit(_):
-    return sys.exit(0)
-
-
-# echo command case
-def handle_echo(args):
-    return print(" ".join(args))
-
-
-# type command case
-def handle_type(args):
-    for arg in args:
-        # Argument is Actual Command
-        if arg in builtin_lib:
-            print(f"{arg} is a shell builtin")
-            continue
-
-        found_file_path = find_which_path(arg)
-        if found_file_path:
-            print(f"{arg} is {found_file_path}")
-        else:
-            print(f"{arg} not found")
-
-
-# Custom Or Not Found Exec Case
-def handle_custom_exec(cmd_line, user_input):
-    file_path = find_which_path(cmd_line[0])
-    if file_path:
-        return lambda _: subprocess.run(cmd_line)
-    return not_found(user_input)
-
-
-def handle_pwd(_):
-    return print(os.getcwd())
-
-
-builtin_lib = {
-    "exit": handle_exit,
-    "echo": handle_echo,
-    "type": handle_type,
-    "pwd": handle_pwd,
-}
+from app.cmd_lib import CommandLibrary
 
 
 def main():
 
+    cmd_lib = CommandLibrary()
     while True:
         sys.stdout.write("$ ")
         user_input = input()
@@ -83,12 +19,7 @@ def main():
         cmd, *args = cmd_line
 
         # Search Command Library for Correct Function To Use
-        command_func = builtin_lib.get(cmd, None)
-
-        # Non Built In Case
-        if not command_func:
-            command_func = handle_custom_exec(cmd_line, user_input)
-
+        command_func = cmd_lib.find_command(cmd, user_input)
         command_func(args)
     pass
 
