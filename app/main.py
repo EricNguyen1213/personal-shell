@@ -1,14 +1,7 @@
 import sys
+import shlex
 import app.utils as utils
 from app.cmd_lib import CommandLibrary
-
-
-def sanitize(m):
-    # Escaped Quote Match Foundex
-    if m.group(1):
-
-        return f"{m.group(2)}{m.group(3)}{m.group(2)}"
-    return m.group(6)
 
 
 def main():
@@ -21,7 +14,7 @@ def main():
         if not user_input:
             continue
 
-        cmd, args = utils.sanitize(user_input)
+        cmd, *args = shlex.split(user_input)
 
         # Search Command Library for Correct Function To Use
         command_func = cmd_lib.find_command(cmd, user_input)
