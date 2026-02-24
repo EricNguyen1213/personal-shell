@@ -1,33 +1,41 @@
-import re
+import sys
+import shlex
+import io
+from app.redirection import Redirection
+
+OPERATORS = {
+    ">": ("output_ch", "w"),
+    "1>": ("output_ch", "w"),
+    "2>": ("error_ch", "w"),
+    ">>": ("output_ch", "a"),
+    "1>>": ("output_ch", "a"),
+    "2>>": ("error_ch", "a"),
+}
 
 
-# OUTSIDE_WHITESPACE = re.compile(
-#     r"""(?<!\\)\s+(?=(?:\\'|\\"|[^'"]|'[^']*'|"[^"]*")*$)"""
-# )
-OUTSIDE_WHITESPACE_EXCLUDER = re.compile(
-    r"""((\\\s)|\\"|\\'|(\'((?!\').)*\')|('((?!').)*')|("(\\"|[^"])*")|([^\s]))+"""
-)
-TOP_QUOTE_UNWRAPPER = r"""(?s)(((?<!\\)(\'|"|'))((\\"|[^"])*?)\3)"""
-ESCAPE_BACKSLASH = r"""\\(?=\\)|(?<!\\)\\"""
-COMBINED_PATTERN = re.compile(f"{TOP_QUOTE_UNWRAPPER}|{ESCAPE_BACKSLASH}")
+def parse_tokens(user_input: str) -> tuple[str, list[str], Redirection]:
+    input_stream = io.StringIO(user_input)
+    tokenizer = shlex.shlex(
+        input_stream, posix=True, punctuation_chars="1>> 2>> >> 1> 2> >"
+    )
+    cmd_line = []
+    redirects = []
+    channels: dict[str, tuple[str, str]] = {}
 
+    while token := tokenizer.get_token():
+        op_configs = OPERATORS.get(token, None)
+        if not op_configs:
+            cmd_line.append(token)
+            continue
 
-def resolve_escapes_and_quotes(m):
-    # If Top-Most Quotes (Avoiding Escaped Quotes Case) Found -> Return Its Body Unchanged
-    if m.group(1):
-        string_body = m.group(4)
-        # Handle Escaped Characters in Double Quotes
-        if m.group(3) == '"':
-            string_body = string_body.replace("\\\\", "\\")
-            string_body = string_body.replace('\\"', '"')
-        return string_body
+        channel_name = tokenizer.get_token()
+        if not channel_name:
+            sys.stdout.write("parse error near `\\n'\n")
+            sys.exit(0)
 
-    # Remove Escape Backslashes
-    return ""
+        if channel := channels.get(op_configs[0], None):
+            redirects.append(channel[0])
+        channels[op_configs[0]] = (channel_name, op_configs[1])
 
-
-def sanitize(user_input):
-    # Split by Whitespace Entirely Outside of Quotes (Avoiding Escaped Cases)
-    cmd, *args = [m.group(0) for m in OUTSIDE_WHITESPACE_EXCLUDER.finditer(user_input)]
-    args = [re.sub(COMBINED_PATTERN, resolve_escapes_and_quotes, arg) for arg in args]
-    return cmd, args
+    cmd, *args = cmd_line
+    return cmd, args, Redirection(redirects, channels)
