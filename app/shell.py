@@ -25,7 +25,7 @@ class PersonalShell:
                     # Search Command Library for Correct Function To Use
                     command_func = self.cmd_lib.find_command(context, cmd, user_input)
                     result = command_func(args)
-                    result.consume()
+                    result.output()
                 finally:
                     context.close()
 

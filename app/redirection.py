@@ -1,8 +1,13 @@
 import sys
 from pathlib import Path
+from enum import Enum
 
-OUTPUT_CH_KEY = "output_ch"
-ERROR_CH_KEY = "error_ch"
+
+class Channel(Enum):
+    OUTPUT_CH = "output_ch"
+    ERROR_CH = "error_ch"
+    WRITE_MODE = "w"
+    APPEND_MODE = "a"
 
 
 class Redirection:
@@ -15,13 +20,13 @@ class Redirection:
         self.error_close = lambda: None
 
         # Redirect Output
-        if output_ch := channels.get(OUTPUT_CH_KEY, None):
-            self.output_file = open(output_ch[0], output_ch[1])
+        if output_ch := channels.get(Channel.OUTPUT_CH, None):
+            self.output_file = open(output_ch[0], output_ch[1].value)
             self.output_close = self.output_file.close
 
         # Redirect Error
-        if error_ch := channels.get(ERROR_CH_KEY, None):
-            self.error_file = open(error_ch[0], error_ch[1])
+        if error_ch := channels.get(Channel.ERROR_CH, None):
+            self.error_file = open(error_ch[0], error_ch[1].value)
             self.error_close = self.error_file.close
 
         for fn in redirects:
@@ -31,5 +36,5 @@ class Redirection:
         self.output_close()
         self.error_close()
 
-    def is_active(self) -> bool:
+    def is_redirected(self) -> bool:
         return not (self.output_file.isatty() and self.error_file.isatty())

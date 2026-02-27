@@ -3,16 +3,16 @@ import shlex
 import io
 import re
 from typing import Iterator
-from app.redirection import Redirection
+from app.redirection import Redirection, Channel
 
 
 OPERATORS = {
-    ">": ("output_ch", "w"),
-    "1>": ("output_ch", "w"),
-    "2>": ("error_ch", "w"),
-    ">>": ("output_ch", "a"),
-    "1>>": ("output_ch", "a"),
-    "2>>": ("error_ch", "a"),
+    ">": (Channel.OUTPUT_CH, Channel.WRITE_MODE),
+    "1>": (Channel.OUTPUT_CH, Channel.WRITE_MODE),
+    "2>": (Channel.ERROR_CH, Channel.WRITE_MODE),
+    ">>": (Channel.OUTPUT_CH, Channel.APPEND_MODE),
+    "1>>": (Channel.OUTPUT_CH, Channel.APPEND_MODE),
+    "2>>": (Channel.ERROR_CH, Channel.APPEND_MODE),
 }
 
 OP_PATTERN = re.compile(r"(1>>|2>>|1>|2>|>>|>)")
@@ -38,18 +38,23 @@ def parse_tokens(user_input: str) -> tuple[str, list[str], Redirection]:
     channels: dict[str, tuple[str, str]] = {}
 
     while token := next(final_tokenizer, ""):
+        # Determine What Channel, Output or Error, & Mode, Write or Append, is Being Adjusted
         op_configs = OPERATORS.get(token, None)
         if not op_configs:
             cmd_line.append(token)
             continue
 
+        # Grab File Name of New Redirection
         channel_name = tokenizer.get_token()
         if not channel_name:
             sys.stdout.write("parse error near `\\n'\n")
             sys.exit(0)
 
+        # Previous Redirection Gets Logged For Continued File Creation
         if channel := channels.get(op_configs[0], None):
             redirects.append(channel[0])
+
+        # Current Redirection Becomes Actual Output or Error File with New Mode
         channels[op_configs[0]] = (channel_name, op_configs[1])
 
     cmd, *args = cmd_line
