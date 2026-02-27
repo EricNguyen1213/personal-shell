@@ -18,15 +18,16 @@ class PersonalShell:
                 if not user_input:
                     continue
 
-                cmd, args, redirection = parse_tokens(user_input)
+                cmd, args, context = parse_tokens(user_input)
 
+                # Allow The Closing of Output Files Even With Crashes
                 try:
                     # Search Command Library for Correct Function To Use
-                    command_func = self.cmd_lib.find_command(cmd, user_input)
+                    command_func = self.cmd_lib.find_command(context, cmd, user_input)
                     result = command_func(args)
-                    result.consume(redirection)
+                    result.consume()
                 finally:
-                    redirection.close()
+                    context.close()
 
             except KeyboardInterrupt:
                 break
