@@ -56,11 +56,7 @@ class CommandResult:
                 if data:
                     self._write(file, data)
                     last_chunk = data
-            if (
-                file in (sys.stdout, sys.stderr)
-                and last_chunk
-                and not last_chunk.endswith("\n")
-            ):
+            if last_chunk and not last_chunk.endswith("\n"):
                 self._write(file, "\n")
 
         err_thread = threading.Thread(
