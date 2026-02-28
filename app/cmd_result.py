@@ -1,11 +1,5 @@
-import os
-import sys
-import threading
-import termios
-import subprocess
-import tty
-import select
-from app.redirection import Redirection
+import sys, os, threading, termios, subprocess, tty, select
+from app.utils import Redirection
 from typing import Iterable, TextIO
 from abc import ABC, abstractmethod
 

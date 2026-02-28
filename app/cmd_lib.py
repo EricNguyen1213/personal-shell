@@ -1,7 +1,5 @@
-import sys
-import os
-import subprocess
-from app.redirection import Redirection
+import sys, os, subprocess
+from app.utils import Commands, Redirection
 from pathlib import Path
 from typing import Callable
 from app.cmd_result import CommandResult, PipeCommandResult, PTYCommandResult
@@ -29,11 +27,11 @@ def find_which_path(fn: str) -> str | None:
 class CommandLibrary:
     def __init__(self) -> None:
         self.command_lib = {
-            "exit": self.handle_exit,
-            "echo": self.handle_echo,
-            "type": self.handle_type,
-            "pwd": self.handle_pwd,
-            "cd": self.handle_cd,
+            Commands.EXIT.value: self.handle_exit,
+            Commands.ECHO.value: self.handle_echo,
+            Commands.TYPE.value: self.handle_type,
+            Commands.PWD.value: self.handle_pwd,
+            Commands.CD.value: self.handle_cd,
         }
 
     def find_command(

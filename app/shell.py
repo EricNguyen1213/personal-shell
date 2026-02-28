@@ -1,18 +1,17 @@
-import sys
-from app.redirection import Redirection
-from app.cmd_lib import CommandLibrary, CommandResult
-from app.utils import parse_tokens
+from app.cmd_lib import CommandLibrary
+from app.utils import Prompt, parse_tokens
 
 
 class PersonalShell:
     def __init__(self) -> None:
         self.cmd_lib = CommandLibrary()
+        self.prompter = Prompt()
 
     def run(self) -> None:
+
         while True:
             try:
-                sys.stdout.write("$ ")
-                user_input = input().strip()
+                user_input = self.prompter.ask()
 
                 # User Input Does Not Exist Case
                 if not user_input:

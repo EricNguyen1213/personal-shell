@@ -1,9 +1,38 @@
-import sys
-import shlex
-import io
-import re
+import sys, os, shlex, io, re, readline
+from pathlib import Path
 from typing import Iterator
-from app.redirection import Redirection, Channel
+from enum import Enum
+from prompt_toolkit import prompt
+from prompt_toolkit.shortcuts import CompleteStyle
+from prompt_toolkit.completion import WordCompleter, Completion
+
+
+class Commands(Enum):
+    EXIT = "exit"
+    ECHO = "echo"
+    TYPE = "type"
+    PWD = "pwd"
+    CD = "cd"
+
+    @classmethod
+    def get_commands(cls) -> list[str]:
+        commands = {cmd.value for cmd in cls}
+        for path in os.getenv("PATH", "").split(os.pathsep):
+            try:
+                with os.scandir(path) as entries:
+                    for item in entries:
+                        if item.is_file() and os.access(item.path, os.X_OK):
+                            commands.add(item.name)
+            except (OSError, PermissionError):
+                continue
+        return list(commands)
+
+
+class Channel(Enum):
+    OUTPUT_CH = "output_ch"
+    ERROR_CH = "error_ch"
+    WRITE_MODE = "w"
+    APPEND_MODE = "a"
 
 
 OPERATORS = {
@@ -16,6 +45,67 @@ OPERATORS = {
 }
 
 OP_PATTERN = re.compile(r"(1>>|2>>|1>|2>|>>|>)")
+
+
+class ShellCompleter(WordCompleter):
+    def get_completions(self, document, complete_event):
+        # Grab Completed Objects from Original Completer
+        for comp in super().get_completions(document, complete_event):
+            # Return the Same Completed Value Except with Whitespace appended
+            yield Completion(
+                text=f"{comp.text} ",
+                start_position=comp.start_position,
+                display=comp.display_text,
+                display_meta=comp.display_meta,
+            )
+
+
+class Prompt:
+    def __init__(self, prompt_toolkit=False):
+        if prompt_toolkit:
+            self._completer_generator = self._shell_completer
+            self.ask = self._tool_ask
+        else:
+            self._completer_generator = self._readline_completer
+            self.ask = lambda: input("$ ")
+
+        self._command_completer = self._completer_generator(Commands.get_commands())
+        self._last_path = os.environ.get("PATH", "")
+
+    # Creates a Command Completer for Prompt Toolkit
+    def _shell_completer(self, cmds: list[str]) -> ShellCompleter:
+        return ShellCompleter(cmds, ignore_case=True, WORD=True)
+
+    # Creates a Command Completer for Readline Module
+    def _readline_completer(self, cmds: list[str]) -> None:
+        def command_completer(text, state):
+            possible_commands = [cmd for cmd in cmds if cmd.startswith(text)]
+            if state < len(possible_commands):
+                return f"{possible_commands[state]} "
+            return None
+
+        # Parse and Bind Tab Button based on OS system, Mac or Linux
+        readline.set_completer(command_completer)
+        if "libedit" in readline.__doc__:
+            readline.parse_and_bind("bind ^I rl_complete")
+        else:
+            readline.parse_and_bind("tab: complete")
+        return
+
+    # Asks a prompt using Prompt Toolkit
+    def _tool_ask(self) -> str:
+        return prompt(
+            "$ ",
+            completer=self._command_completer,
+            complete_style=CompleteStyle.MULTI_COLUMN,
+        ).strip()
+
+    # Refreshes List of Commands that exist and corresponding completer
+    def check_and_refresh(self) -> None:
+        current_path = os.environ.get("PATH", "")
+        if self._last_path != current_path:
+            self._command_completer = self._completer_generator(Commands.get_commands())
+            self._last_path = current_path
 
 
 def operator_finder(tokenizer: shlex.shlex) -> Iterator[str]:
@@ -59,3 +149,33 @@ def parse_tokens(user_input: str) -> tuple[str, list[str], Redirection]:
 
     cmd, *args = cmd_line
     return cmd, args, Redirection(redirects, channels)
+
+
+class Redirection:
+    def __init__(
+        self, redirects: list[str], channels: dict[str, tuple[str, str]]
+    ) -> None:
+        self.output_file = sys.stdout
+        self.error_file = sys.stderr
+        self.output_close = lambda: None
+        self.error_close = lambda: None
+
+        # Redirect Output
+        if output_ch := channels.get(Channel.OUTPUT_CH, None):
+            self.output_file = open(output_ch[0], output_ch[1].value)
+            self.output_close = self.output_file.close
+
+        # Redirect Error
+        if error_ch := channels.get(Channel.ERROR_CH, None):
+            self.error_file = open(error_ch[0], error_ch[1].value)
+            self.error_close = self.error_file.close
+
+        for fn in redirects:
+            Path(fn).touch()
+
+    def close(self) -> None:
+        self.output_close()
+        self.error_close()
+
+    def is_redirected(self) -> bool:
+        return not (self.output_file.isatty() and self.error_file.isatty())
