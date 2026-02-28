@@ -1,4 +1,4 @@
-import sys, os, threading, termios, subprocess, tty, select
+import sys, os, threading, termios, subprocess, tty, select, gc
 from app.utils import Redirection
 from typing import Iterable, TextIO
 from abc import ABC, abstractmethod
@@ -64,6 +64,8 @@ class PipeCommandResult(CommandResult):
 
         # 3. Cleanup
         err_thread.join()
+        del err_thread
+        self._write = None
         if self.process:
             self.process.wait()
 
@@ -99,9 +101,12 @@ class PTYCommandResult(CommandResult):
     # Forwards User Keyboard Inputs To Master FD
     def _forward(self) -> None:
         # Checks if Child Process Running Command Still Exists
+        read_list = [sys.stdin.fileno()]
+        empty_list = []
         while not self.child_end.is_set():
             # Checks if Stdin has been written to by Keyboard
-            if select.select([sys.stdin.fileno()], [], [], 0.1)[0]:
+            r, _, _ = select.select(read_list, empty_list, empty_list, 0.1)
+            if r:
                 data = os.read(sys.stdin.fileno(), CHUNK_SIZE)
                 if not data:
                     break
@@ -123,3 +128,7 @@ class PTYCommandResult(CommandResult):
             keyinput_thread.join()
             os.waitpid(self.pid, 0)
             termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, old_configs)
+            # Garbage Collect Lists Generated from Select in Keyboard Checking Loop
+            gc.collect()
+            del keyinput_thread
+            self._write = None
