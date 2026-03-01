@@ -1,11 +1,12 @@
-import sys, os, subprocess
-from app.utils import Commands, Redirection
+import sys, os, subprocess, io
+from app.utils import ExitStatus, Commands, Redirection
 from pathlib import Path
 from typing import Callable
 from app.cmd_result import CommandResult, PipeCommandResult, PTYCommandResult
 
 
 DEFAULT_TERM = "xterm-256color"
+TEST_NUM = 0
 
 
 def find_which_path(fn: str) -> str | None:
@@ -39,6 +40,7 @@ class CommandLibrary:
     ) -> Callable[[list[str]], CommandResult]:
 
         if command_func := self.command_lib.get(cmd, None):
+            context.close_input()
             return lambda args: command_func(context, args)
 
         # Search for Custom Command Case
@@ -59,7 +61,7 @@ class CommandLibrary:
 
     # exit Command case
     def handle_exit(self, context: Redirection, _) -> CommandResult:
-        sys.exit(0)
+        os._exit(ExitStatus.FORCEEXIT.value)
         return PipeCommandResult(context)
 
     # echo Command Case
@@ -107,10 +109,15 @@ class CommandLibrary:
         self, context: Redirection, cmd: str
     ) -> Callable[[list[str]], CommandResult]:
 
+        global TEST_NUM
+        # print(f"{TEST_NUM}: {context.input_file}")
+        TEST_NUM += 1
+
         # Redirection to different file case, Use different pipes for output and error stream of process
         def handler(args: list[str]) -> CommandResult:
             process = subprocess.Popen(
                 [cmd, *args],
+                stdin=context.input_file,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -133,10 +140,8 @@ class CommandLibrary:
 
         # Default Sys.stdout & Sys.stderr case, Use Master/Slave Processes
         def handler(args: list[str]) -> CommandResult:
-
             # Generates Master/Slave Pair, redirecting child process stdin, stdout, stderr to Slave PTY
             pid, master_fd = os.forkpty()
-
             if pid == 0:
                 try:
                     # Child Process set terminal type

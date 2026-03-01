@@ -1,10 +1,14 @@
 import sys, os, shlex, io, re, readline
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Callable
 from enum import Enum
 from prompt_toolkit import prompt
 from prompt_toolkit.shortcuts import CompleteStyle
 from prompt_toolkit.completion import WordCompleter, Completion
+
+
+class ExitStatus(Enum):
+    FORCEEXIT = 127
 
 
 class Commands(Enum):
@@ -45,6 +49,134 @@ OPERATORS = {
 }
 
 OP_PATTERN = re.compile(r"(1>>|2>>|1>|2>|>>|>)")
+
+
+def operator_finder(tokenizer: shlex.shlex) -> Iterator[str]:
+    for token in tokenizer:
+        if ">" in token:
+            parts = re.split(OP_PATTERN, token)
+            yield from (p for p in parts if p)
+        else:
+            yield token
+
+
+def parse_tokens(user_input: str) -> list[tuple[str, list[str], Redirection]]:
+    input_stream = io.StringIO(user_input)
+    tokenizer = shlex.shlex(input_stream, posix=True, punctuation_chars="|")
+    tokenizer.whitespace_split = True
+    final_tokenizer = operator_finder(tokenizer)
+
+    pipe_sections = []
+    cmdline, redirects, channels = [], [], {}
+
+    while token := next(final_tokenizer, ""):
+        # Define a Section of the Pipeline
+        if token == "|":
+            cmd, *args = cmdline
+            pipe_sections.append((cmd, args, Redirection(redirects, channels, True)))
+            cmdline, redirects, channels = [], [], {}
+            continue
+
+        # Determine What Channel, Output or Error, & Mode, Write or Append, is Being Adjusted
+        op_configs = OPERATORS.get(token, None)
+        if not op_configs:
+            cmdline.append(token)
+            continue
+
+        # Grab File Name of New Redirection
+        channel_name = tokenizer.get_token()
+        if not channel_name:
+            sys.stdout.write("parse error near `\\n'\n")
+            sys.exit(0)
+
+        # Previous Redirection Gets Logged For Continued File Creation
+        if channel := channels.get(op_configs[0], None):
+            redirects.append(channel[0])
+
+        # Current Redirection Becomes Actual Output or Error File with New Mode
+        channels[op_configs[0]] = (channel_name, op_configs[1])
+
+    cmd, *args = cmdline
+    is_piped = len(pipe_sections) > 0
+    return pipe_sections, (cmd, args, Redirection(redirects, channels, is_piped))
+
+
+def setup_pipes(
+    context: Redirection, prev_stdin_pipe: io.TextIOWrapper | None
+) -> io.TextIOWrapper:
+    # Setting stdin of Current Pipe Section
+    context.set_input(prev_stdin_pipe)
+
+    if context.output_file.isatty():
+        # Current Pipe Section Outputs to stdout -> Instead Redirect its Outputs to Pipes
+        piped_ends = os.pipe()
+        context.set_output(os.fdopen(piped_ends[1], context.output_file.mode))
+
+        # Retrieve stdin pipe for Next Pipe Section
+        next_stdin_pipe = os.fdopen(piped_ends[0], "r")
+    else:
+        # Current Pipe Section Outputs to File -> Make File Readable for Next Pipe Section
+        next_stdin_pipe = open(context.output_file.name, "r")
+    return next_stdin_pipe
+
+
+def close_child_pipes(pipe: Redirection, extra: io.TextIOWrapper) -> None:
+    pipe.close()
+    extra.close()
+    sys.exit(0)
+
+
+class Redirection:
+    def __init__(
+        self, redirects: list[str], channels: dict[str, tuple[str, str]], is_piped: bool
+    ) -> None:
+        self.input_file, self.output_file, self.error_file = (
+            None,
+            sys.stdout,
+            sys.stderr,
+        )
+        self._close_input = self.close_output = self.close_error = lambda: None
+        self.is_piped = is_piped
+
+        # Redirect Output
+        if output_ch := channels.get(Channel.OUTPUT_CH, None):
+            self.set_output(open(output_ch[0], output_ch[1].value))
+
+        # Redirect Error
+        if error_ch := channels.get(Channel.ERROR_CH, None):
+            self.set_error(open(error_ch[0], error_ch[1].value))
+
+        for fn in redirects:
+            Path(fn).touch()
+
+    # Closes All Open Files
+    def close(self) -> None:
+        self.close_input()
+        self.close_output()
+        self.close_error()
+
+    def is_redirected(self) -> bool:
+        return self.is_piped or not (
+            self.output_file.isatty() and self.error_file.isatty()
+        )
+
+    def set_input(self, input_file: io.TextIOWrapper | None) -> None:
+        if input_file:
+            self.input_file = input_file
+            self._close_input = input_file.close
+
+    def set_output(self, file: io.TextIOWrapper):
+        self.output_file = file
+        self.close_output = file.close
+
+    def set_error(self, file: io.TextIOWrapper):
+        self.error_file = file
+        self.close_error = file.close
+
+    # Allows for Individual Closure of Input File While Maintaining Safety of Calling Close on All
+    def close_input(self):
+        self._close_input()
+        self._close_input = lambda: None
 
 
 class ShellCompleter(WordCompleter):
@@ -106,76 +238,3 @@ class Prompt:
         if self._last_path != current_path:
             self._command_completer = self._completer_generator(Commands.get_commands())
             self._last_path = current_path
-
-
-def operator_finder(tokenizer: shlex.shlex) -> Iterator[str]:
-    for token in tokenizer:
-        if ">" in token:
-            parts = re.split(OP_PATTERN, token)
-            yield from (p for p in parts if p)
-        else:
-            yield token
-
-
-def parse_tokens(user_input: str) -> tuple[str, list[str], Redirection]:
-    input_stream = io.StringIO(user_input)
-    tokenizer = shlex.shlex(input_stream, posix=True)
-    tokenizer.whitespace_split = True
-    final_tokenizer = operator_finder(tokenizer)
-
-    cmd_line = []
-    redirects = []
-    channels: dict[str, tuple[str, str]] = {}
-
-    while token := next(final_tokenizer, ""):
-        # Determine What Channel, Output or Error, & Mode, Write or Append, is Being Adjusted
-        op_configs = OPERATORS.get(token, None)
-        if not op_configs:
-            cmd_line.append(token)
-            continue
-
-        # Grab File Name of New Redirection
-        channel_name = tokenizer.get_token()
-        if not channel_name:
-            sys.stdout.write("parse error near `\\n'\n")
-            sys.exit(0)
-
-        # Previous Redirection Gets Logged For Continued File Creation
-        if channel := channels.get(op_configs[0], None):
-            redirects.append(channel[0])
-
-        # Current Redirection Becomes Actual Output or Error File with New Mode
-        channels[op_configs[0]] = (channel_name, op_configs[1])
-
-    cmd, *args = cmd_line
-    return cmd, args, Redirection(redirects, channels)
-
-
-class Redirection:
-    def __init__(
-        self, redirects: list[str], channels: dict[str, tuple[str, str]]
-    ) -> None:
-        self.output_file = sys.stdout
-        self.error_file = sys.stderr
-        self.output_close = lambda: None
-        self.error_close = lambda: None
-
-        # Redirect Output
-        if output_ch := channels.get(Channel.OUTPUT_CH, None):
-            self.output_file = open(output_ch[0], output_ch[1].value)
-            self.output_close = self.output_file.close
-
-        # Redirect Error
-        if error_ch := channels.get(Channel.ERROR_CH, None):
-            self.error_file = open(error_ch[0], error_ch[1].value)
-            self.error_close = self.error_file.close
-
-        for fn in redirects:
-            Path(fn).touch()
-
-    def close(self) -> None:
-        self.output_close()
-        self.error_close()
-
-    def is_redirected(self) -> bool:
-        return not (self.output_file.isatty() and self.error_file.isatty())

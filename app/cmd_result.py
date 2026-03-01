@@ -1,4 +1,4 @@
-import sys, os, threading, termios, subprocess, tty, select, gc
+import sys, os, threading, termios, io, tty, select, gc, subprocess
 from app.utils import Redirection
 from typing import Iterable, TextIO
 from abc import ABC, abstractmethod
@@ -36,8 +36,8 @@ class PipeCommandResult(CommandResult):
     def __init__(
         self,
         context: Redirection,
-        stdout: Iterable[str] = [],
-        stderr: Iterable[str] = [],
+        stdout: Iterable[str] | io.TextIOWrapper = [],
+        stderr: Iterable[str] | io.TextIOWrapper = [],
         process: subprocess.Popen | None = None,
         flush: bool = False,
     ) -> None:
@@ -47,7 +47,7 @@ class PipeCommandResult(CommandResult):
         self.process = process
 
     def _consume(self) -> None:
-        def drain(input: Iterable[str], file: TextIO) -> None:
+        def drain(input: Iterable[str], file: TextIO, tester: str = "") -> None:
             last_chunk = ""
             for data in input:
                 if data:
@@ -65,9 +65,10 @@ class PipeCommandResult(CommandResult):
         # 3. Cleanup
         err_thread.join()
         del err_thread
-        self._write = None
         if self.process:
             self.process.wait()
+            self.stdout.close()
+            self.stderr.close()
 
 
 class PTYCommandResult(CommandResult):
@@ -131,4 +132,3 @@ class PTYCommandResult(CommandResult):
             # Garbage Collect Lists Generated from Select in Keyboard Checking Loop
             gc.collect()
             del keyinput_thread
-            self._write = None
